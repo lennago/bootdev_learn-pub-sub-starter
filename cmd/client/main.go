@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
@@ -44,9 +45,19 @@ func main() {
 		fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, gs.GetUsername()),
 		fmt.Sprintf("%s.*", routing.ArmyMovesPrefix),
 		pubsub.SimpleQueueTransient,
-		handlerMove(gs),
+		handlerMove(gs, pubCh),
 	); err != nil {
 		log.Fatalf("couldn't subscribe to army moves: %v", err)
+	}
+	if err := pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.WarRecognitionsPrefix,
+		fmt.Sprintf("%s.*", routing.WarRecognitionsPrefix),
+		pubsub.SimpleQueueDurable,
+		handlerWar(gs, pubCh),
+	); err != nil {
+		log.Fatalf("couldn't subscripe to war: %v", err)
 	}
 	for {
 		input := gamelogic.GetInput()
@@ -88,4 +99,17 @@ func main() {
 			log.Printf("unknown command: %s", input[0])
 		}
 	}
+}
+
+func PublishGameLog(ch *amqp.Channel, username, msg string) error {
+	return pubsub.PublishGob(
+		ch,
+		routing.ExchangePerilTopic,
+		fmt.Sprintf("%s.%s", routing.GameLogSlug, username),
+		routing.GameLog{
+			Username:    username,
+			Message:     msg,
+			CurrentTime: time.Now(),
+		},
+	)
 }
